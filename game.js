@@ -1,8 +1,3 @@
-/**
- * Created by alexandr on 24.02.2016.
- */
-
-
 var Game = function() {
     this.setupScale();
 
@@ -10,9 +5,7 @@ var Game = function() {
     window.addEventListener('orientationchange', this.orientation.bind(this), false);
 
     // Setup the rendering surface.
-    this.renderer = new PIXI.autoDetectRenderer(this._width, this._height, {
-        resolution: window.devicePixelRatio || 1
-    });
+    this.renderer = new PIXI.autoDetectRenderer(this._width, this._height);
     document.body.appendChild(this.renderer.view);
 
     // Create the main stage to draw on.
@@ -77,7 +70,7 @@ Game.prototype = {
      */
     setupMenu: function() {
         // Create game name display.
-        var name = new PIXI.Text('Candy Slice', {
+        var name = new PIXI.Text('Stone Samurai', {
             font: 'bold ' + Math.round(this._scale * 100) + 'px Arial',
             fill: '#7da6de',
             stroke: 'black',
@@ -188,8 +181,9 @@ Game.prototype = {
             for (var i=0; i<num; i++) {
                 // Create the texture of the rock.
                 var rock = new PIXI.Sprite.fromImage('./images/' + (Math.random() > 0.5 ? 'stone01' : 'stone02') + '.png');
+                // rock.scale = (33 + Math.random() * 67) / 100;
                 rock.position.x = Math.round(Math.random() * this._width);
-                rock.position.y = this._height + Math.round(this._scale * 100);
+                rock.position.y = this._height + Math.round(this._scale  * 100);
                 rock.anchor.x = 0.5;
                 rock.anchor.y = 0.5;
                 rock.width = Math.round(this._scale * rock.texture.width);
