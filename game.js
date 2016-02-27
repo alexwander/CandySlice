@@ -4,8 +4,15 @@ var Game = function() {
     // Setup listener for device orientation change.
     window.addEventListener('orientationchange', this.orientation.bind(this), false);
 
+    // Setup shake event.
+    var shake = new Shake();
+    shake.start();
+    window.addEventListener('shake', this.handleShake.bind(this), false);
+
     // Setup the rendering surface.
-    this.renderer = new PIXI.autoDetectRenderer(this._width, this._height);
+    this.renderer = new PIXI.autoDetectRenderer(this._width, this._height, {
+        resolution: window.devicePixelRatio || 1
+    });
     document.body.appendChild(this.renderer.view);
 
     // Create the main stage to draw on.
@@ -31,6 +38,15 @@ Game.prototype = {
 
         // Check the orientation.
         this.orientation();
+
+        // Setup audio sprite.
+        this.sound = new Howl({
+            src: ['./audio/sounds.ogg', './audio/sounds.mp3'],
+            sprite: {
+                stone: [0, 480],
+                bomb: [2000, 1612]
+            }
+        });
 
         // Begin the first frame.
         requestAnimationFrame(this.tick.bind(this));
@@ -70,7 +86,7 @@ Game.prototype = {
      */
     setupMenu: function() {
         // Create game name display.
-        var name = new PIXI.Text('Stone Samurai', {
+        var name = new PIXI.Text('Candy Slice', {
             font: 'bold ' + Math.round(this._scale * 100) + 'px Arial',
             fill: '#7da6de',
             stroke: 'black',
@@ -180,14 +196,42 @@ Game.prototype = {
             var num = Math.ceil(Math.random() * 3);
             for (var i=0; i<num; i++) {
                 // Create the texture of the rock.
-                var rock = new PIXI.Sprite.fromImage('./images/' + (Math.random() > 0.5 ? 'stone01' : 'stone02') + '.png');
-                // rock.scale = (33 + Math.random() * 67) / 100;
+                var frame;
+                var bomb = false;
+                var rand = Math.random();
+                if (rand < 0.33) {
+                    frame = {
+                        x: 0,
+                        y: 0,
+                        width: 158 * (window.devicePixelRatio || 1),
+                        height: 150 * (window.devicePixelRatio || 1)
+                    };
+                } else if (rand < 0.66) {
+                    frame = {
+                        x: 180 * (window.devicePixelRatio || 1),
+                        y: 0,
+                        width: 152 * (window.devicePixelRatio || 1),
+                        height: 150 * (window.devicePixelRatio || 1)
+                    };
+                } else {
+                    bomb = true;
+                    frame = {
+                        x: 355 * (window.devicePixelRatio || 1),
+                        y: 9 * (window.devicePixelRatio || 1),
+                        width: 102 * (window.devicePixelRatio || 1),
+                        height: 132 * (window.devicePixelRatio || 1)
+                    };
+                };
+                var img = PIXI.Texture.fromImage('./images/sprite' + (window.devicePixelRatio > 1 ? '@2x' : '') + '.png');
+                var tex = new PIXI.Texture(img, frame);
+                var rock = new PIXI.Sprite(tex);
                 rock.position.x = Math.round(Math.random() * this._width);
-                rock.position.y = this._height + Math.round(this._scale  * 100);
+                rock.position.y = this._height + Math.round(this._scale * 100);
                 rock.anchor.x = 0.5;
                 rock.anchor.y = 0.5;
                 rock.width = Math.round(this._scale * rock.texture.width);
                 rock.height = Math.round(this._scale * rock.texture.height);
+                rock._bomb = bomb;
 
                 // Make the rock clickable.
                 rock.interactive = true;
@@ -204,17 +248,7 @@ Game.prototype = {
                     .to({y: this._height + 100}, 3000)
                     .easing(TWEEN.Easing.Cubic.In)
                     .onComplete(function(stone) {
-                        // Remove the stone from the stage.
-                        this.stage.removeChild(stone);
-
-                        // Remove a life.
-                        this._lives--;
-                        this.lives.setText('♥  ' + this._lives);
-
-                        // End game if out of lives.
-                        if (this._lives <= 0) {
-                            this.endGame();
-                        }
+                        this.loseLife(stone);
                     }.bind(this, rock));
                 rock._tween1.chain(rock._tween2);
 
@@ -232,6 +266,14 @@ Game.prototype = {
      * @param  {PIXI.Sprite} rock Rock sprite to explode.
      */
     explodeRock: function(rock) {
+        // End the game if a bomb is clicked.
+        if (rock._bomb) {
+            this.loseLife(rock);
+            return;
+        }
+
+        this.sound.play('stone');
+
         // Stop tweening the rock.
         rock._tween1.stop();
         rock._tween2.stop();
@@ -240,7 +282,9 @@ Game.prototype = {
         // Create several smaller rocks.
         for (var i=0; i<4; i++) {
             // Setup the rock sprite.
-            var piece = new PIXI.Sprite.fromImage(rock.texture.baseTexture.imageUrl);
+            var img = PIXI.Texture.fromImage(rock.texture.baseTexture.imageUrl);
+            var tex = new PIXI.Texture(img, rock.texture.frame);
+            var piece = new PIXI.Sprite(tex);
             piece.width = Math.round(rock.width * 0.33);
             piece.height = Math.round(rock.height * 0.33);
             piece.anchor.x = 0.5;
@@ -266,6 +310,38 @@ Game.prototype = {
         // Update the score.
         this._score++;
         this.score.setText('★ ' + this._score);
+    },
+
+    /**
+     * Callback fired when shake event is triggered to clear bombs.
+     */
+    handleShake: function() {
+        // Loop through objects to find the active bomb.
+        for (var i=this.rocks.length - 1; i>=0; i--) {
+            if (this.rocks[i] && this.rocks[i]._bomb) {
+                this.rocks[i]._bomb = null;
+                this.explodeRock(this.rocks[i]);
+                this.sound.play('bomb');
+            }
+        }
+    },
+
+    /**
+     * Lose a life and check for end game.
+     * @param  {PIXI.Sprite} rock Rock sprite to remove.
+     */
+    loseLife: function(rock) {
+        // Remove the stone from the stage.
+        this.stage.removeChild(rock);
+
+        // Remove a life.
+        this._lives--;
+        this.lives.setText('♥  ' + this._lives);
+
+        // End game if out of lives.
+        if (this._lives <= 0) {
+            this.endGame();
+        }
     },
 
     /**
